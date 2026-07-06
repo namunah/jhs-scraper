@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Runs the scraper for up to ~5h45m (GitHub Actions jobs cap at 6h), then
-# checks progress. If everything is done, drops a DONE marker so future
-# scheduled runs no-op instead of re-scraping.
+# Runs the scraper for up to 5h45m (20700s) — GitHub Actions jobs cap at 6h.
+# Checks progress afterward. Only marks DONE if villages were actually
+# discovered AND none remain — avoids false-completing on an empty/failed run.
 set -e
 
 if [ -f DONE ]; then
@@ -10,15 +10,18 @@ if [ -f DONE ]; then
 fi
 
 echo "Starting/resuming crawl..."
-timeout 5h45m python3 scrape_jharkhand.py || true
+timeout 20700s python3 scrape_jharkhand.py || true
 
 echo "---- Progress ----"
 python3 scrape_jharkhand.py --stats
 
+total=$(python3 scrape_jharkhand.py --stats | grep "^villages:" | awk '{print $NF}')
 remaining=$(python3 scrape_jharkhand.py --stats | grep "remaining" | awk '{print $NF}')
-echo "Villages remaining: $remaining"
+echo "Total villages found: $total | Remaining: $remaining"
 
-if [ "$remaining" = "0" ]; then
+if [ "$total" -gt 0 ] && [ "$remaining" = "0" ]; then
   echo "All villages scraped. Marking DONE."
   touch DONE
+else
+  echo "Not done yet (or nothing scraped this run) — will resume next scheduled run."
 fi
