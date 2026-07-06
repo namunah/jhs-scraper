@@ -1,0 +1,42 @@
+name: Scrape Jharkhand Villages
+
+on:
+  workflow_dispatch: {}       # lets you trigger it manually from the Actions tab
+  schedule:
+    - cron: '0 */6 * * *'     # re-runs every 6 hours to continue where it left off
+
+permissions:
+  contents: write             # needed so the workflow can commit the DB back to the repo
+
+concurrency:
+  group: scrape-jharkhand
+  cancel-in-progress: false   # if a run is still going, queue the next one instead of overlapping
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run scraper (time-boxed)
+        run: |
+          chmod +x scrape_runner.sh
+          ./scrape_runner.sh
+
+      - name: Commit progress back to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A jharkhand_villages.db crawl.log DONE 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Scrape progress update"
+          git push
